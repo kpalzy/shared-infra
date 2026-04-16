@@ -29,9 +29,9 @@ genai/
 
 | 파일 | 역할 |
 |------|------|
-| **[PORT-REGISTRY.md](shared-infra/PORT-REGISTRY.md)** | 앱별 포트 배정 현황 + 새 앱 추가 체크리스트 |
+| **[PORT-REGISTRY.md](shared-infra/PORT-REGISTRY.md)** | 앱별 포트 배정 현황 + 새 앱 추가 체크리스트. 새 앱 추가 전 필독 |
 | **[shared-infra/AGENTS.md](shared-infra/AGENTS.md)** | Caddy·Postgres 운영 규칙, 배포 시 Caddyfile 수정법 |
-| **[shared-infra/DOCKER-VOLUME-STRATEGY.md](shared-infra/DOCKER-VOLUME-STRATEGY.md)** | 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s) |
+| **[shared-infra/DOCKER-VOLUME-STRATEGY.md](shared-infra/DOCKER-VOLUME-STRATEGY.md)** | macOS Docker 필수 셋업 + 환경별 볼륨 전략. 새 맥·컨테이너 추가 전 필독 |
 
 ---
 

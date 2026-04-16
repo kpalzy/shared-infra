@@ -21,6 +21,16 @@ shared-infra/
 
 ---
 
+## Docker 셋업 — 반드시 먼저 읽을 것
+
+**새 맥 세팅, Docker 컨테이너 추가, compose 파일 작성 전에 반드시 확인:**
+→ [`DOCKER-VOLUME-STRATEGY.md`](DOCKER-VOLUME-STRATEGY.md)
+
+macOS(Rancher Desktop) 환경에서 Docker를 올바르게 쓰려면 data-root 설정과 bind mount 전략을 반드시 이해해야 한다.
+이 문서를 읽지 않고 Docker를 세팅하면 빌드가 터지거나 DB 데이터가 날아간다.
+
+---
+
 ## 포트 관리 — 반드시 먼저 읽을 것
 
 **새 앱 추가, 서버 실행, 포트 변경 전에 반드시 확인:**
