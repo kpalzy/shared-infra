@@ -17,7 +17,7 @@ genai/
 │   ├── caddy/                ← shared_caddy (포트 80/443)
 │   ├── postgres/             ← shared_postgres (포트 5432)
 │   └── docs/                 ← 운영 참고 문서
-│       └── docker-macos-settings.md
+│       └── docker-volume-strategy.md
 │
 ├── kepture/                  ← 쇼핑 리서치 큐레이션 앱
 ├── samil_workforce_hub/      ← 인력 운영 관리 앱
@@ -32,7 +32,7 @@ genai/
 |------|------|
 | **[PORTS.md](shared-infra/PORTS.md)** | 앱별 포트 배정 현황 + 새 앱 추가 체크리스트 |
 | **[shared-infra/AGENTS.md](shared-infra/AGENTS.md)** | Caddy·Postgres 운영 규칙, 배포 시 Caddyfile 수정법 |
-| **[shared-infra/docs/docker-macos-settings.md](shared-infra/docs/docker-macos-settings.md)** | macOS Docker 스토리지 구조 + 영속성 문제 해결 가이드 |
+| **[shared-infra/docs/docker-volume-strategy.md](shared-infra/docs/docker-volume-strategy.md)** | 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s) |
 
 ---
 
@@ -124,4 +124,4 @@ docker network create shared
 
 > ⚠️ **macOS 데이터 영속성**: Rancher Desktop은 Linux VM 위에서 동작한다.
 > Docker named volume은 VM 재시작 시 소실되므로, **stateful 서비스(postgres 등)는 반드시 bind mount(`./data`)를 사용**할 것.
-> 자세한 내용: [`docs/docker-macos-settings.md`](docs/docker-macos-settings.md)
+> 자세한 내용: [`docs/docker-volume-strategy.md`](docs/docker-volume-strategy.md)
