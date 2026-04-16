@@ -14,15 +14,22 @@ macOS에서 Rancher Desktop v1.22+을 쓸 때 핵심 설정 요약.
 - `Preferences → Container Engine → General` → **containerd** 권장
   - K8s 표준 런타임, k3s와 이미지 스토어 공유, 미래 K8s 개발로 자연스럽게 이어짐
 
-**1. data-root 설정 — 엔진별로 다름**
+**1. VM 디스크(diffdisk) — 엔진 공통**
 
-| 엔진 | 기본 저장 위치 | data-root 변경 방법 | 필요 여부 |
-|---|---|---|---|
-| **dockerd** | diffdisk 내 `/var/lib/docker` | GUI → `dockerd options` → JSON 한 줄 | 선택 (권장) |
-| **containerd** | diffdisk 내 `/var/lib` | **사실상 불가** (config.toml 재시작 시 덮어쓰임) | **불필요** |
+100GB 한도는 containerd/dockerd 무관하게 **VM 레벨 설정**이다. 엔진을 바꿔도 한도는 동일하다.  
+Sparse file이라 실제 쓴 만큼만 SSD 점유 (factory reset 직후 ~400MB).
 
-> RD v1.22+에서 `/var/lib`은 tmpfs가 아닌 **data-volume(100GB 전용 ext4)**에 마운트된다.  
-> containerd 기본값 그대로도 빌드 실패나 용량 문제가 없다.
+**2. data-root 설정 — 엔진별로 다름**
+
+| | containerd | dockerd |
+|---|---|---|
+| 기본 저장 위치 | diffdisk 내 `/var/lib` | diffdisk 내 `/var/lib/docker` |
+| Mac SSD 직접 저장 | **사실상 불가** (config.toml 재시작 시 덮어쓰임) | **GUI로 가능** — RD 자체 설정에 저장, 재시작 후 유지 |
+| prune 후 공간 반환 | diffdisk sparse block 미반환 | Mac APFS가 즉시 반환 ✅ |
+| 변경 필요 여부 | 불필요 (100GB 기본으로 충분) | 선택 사항 (diffdisk 밖으로 분리하고 싶을 때) |
+
+> RD v1.22+에서 `/var/lib`은 tmpfs가 아닌 **100GB data-volume**에 마운트된다.  
+> containerd는 기본값 그대로도 빌드 실패 없다. dockerd는 GUI로 Mac SSD 분리가 가능해 prune 효율이 높다.
 
 **2. stateful 서비스는 반드시 bind mount 사용**  
 PostgreSQL 등 DB 컨테이너는 named volume 대신 `./data` bind mount를 쓸 것.  
@@ -167,11 +174,8 @@ rdctl shell sudo fstrim /
 
 ## data-root 설정 — 엔진별 가이드
 
-> **containerd 사용 시 (권장)**: data-root 설정 불필요.  
-> RD v1.22+에서 `/var/lib`이 이미 100GB data-volume에 있으므로 기본값으로 충분하다.  
->
-> **dockerd 사용 시**: data-root를 `~/docker-data`로 변경하면 diffdisk 밖으로 분리되어  
-> `docker system prune` 시 Mac SSD 공간이 즉시 반환된다는 이점이 있다.
+> **containerd 사용 시**: data-root 설정 불필요. 100GB data-volume 기본값으로 충분.  
+> **dockerd 사용 시**: GUI로 `~/docker-data` 설정 가능. diffdisk 밖 Mac SSD에 직접 저장되어 prune 시 공간이 즉시 반환됨.
 
 ### 먼저 — 컨테이너 엔진 선택
 
@@ -829,8 +833,8 @@ Kubernetes Cluster
 ### 환경별 최종 요약
 
 ```
-로컬 macOS (RD v1.22+)  → containerd: 기본값으로 충분. DB는 bind mount 권장 (factory-reset 대비)
-                           dockerd: data-root ~/docker-data 설정하면 diffdisk 밖으로 분리 가능
+로컬 macOS (RD v1.22+)  → containerd: diffdisk 100GB 기본값으로 충분. DB는 bind mount 권장.
+                           dockerd: GUI로 data-root ~/docker-data 설정 → Mac SSD 직접 저장, prune 즉시 반환.
 로컬 Linux              → named volume 또는 bind mount 자유롭게 사용 가능
 클라우드 단일 VM         → bind mount + 별도 데이터 볼륨(EBS 등) 분리
 Kubernetes              → PersistentVolumeClaim + StorageClass
