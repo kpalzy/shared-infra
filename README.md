@@ -15,6 +15,8 @@ genai/
 │   ├── AGENTS.md             ← 인프라 운영 규칙
 │   ├── PORT-REGISTRY.md      ← 포트 레지스트리 (필독 — 새 앱 추가 전 항상 확인)
 │   ├── caddy/                ← shared_caddy (포트 80/443)
+│   │   ├── Caddyfile                 ← 라우팅 설정 (git 관리)
+│   │   └── caddy.secrets.env.example ← 시크릿 템플릿 (git 관리)
 │   ├── postgres/             ← shared_postgres (포트 5432)
 │   └── DOCKER-VOLUME-STRATEGY.md ← Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
 │
@@ -25,7 +27,7 @@ genai/
 
 ---
 
-## 핵심 문서 2개
+## 핵심 문서
 
 | 파일 | 역할 |
 |------|------|

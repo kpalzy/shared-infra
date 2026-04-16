@@ -7,7 +7,12 @@
 
 ## TL;DR — 결론부터
 
-macOS에서 Rancher Desktop을 쓰면 두 가지를 반드시 설정해야 한다.
+macOS에서 Rancher Desktop을 쓰면 세 가지를 반드시 설정해야 한다.
+
+**0. Rancher Desktop 초기 설정 (새 맥 세팅 시 가장 먼저)**
+- `Preferences → Kubernetes → Enable Kubernetes` **체크 해제** → RAM 약 500MB 절약
+- `Preferences → Container Engine → General` → **dockerd (moby)** 선택
+  - docker compose 완전 호환. containerd(nerdctl compose)는 미구현 기능 다수
 
 **1. data-root를 `~/docker-data`로 전역 설정 (필수)**  
 기본값(`/var/lib/docker`)은 VM의 tmpfs 위에 있어 8GB RAM 기준 3.9GB밖에 안 된다.  
@@ -356,23 +361,25 @@ postgres/data/
 
 ---
 
-### 0단계 — 전제 조건 확인
+### 0단계 — 전제 조건 및 초기 설정
 
+**Rancher Desktop 실행 확인:**
 ```bash
-# Rancher Desktop이 실행 중인지 확인
 docker ps
 ```
-
 `Cannot connect to the Docker daemon` 오류 → Rancher Desktop을 먼저 실행하고 재시도.
 
+**Rancher Desktop 초기 설정 (새 맥이면 먼저 확인):**
+
+1. `Preferences → Kubernetes → Enable Kubernetes` **체크 해제** — RAM 약 500MB 절약. docker compose 개발에 불필요
+2. `Preferences → Container Engine → General` → **dockerd (moby)** 선택 권장
+
+**컨테이너 엔진 확인:**
 ```bash
-# 컨테이너 엔진 확인
 docker info | grep "Storage Driver"
 ```
 
-또는 `Rancher Desktop → Preferences → Container Engine → General`에서 확인.
 결과에 따라 1단계 분기:
-
 - **dockerd (moby)** → 1단계-A
 - **containerd** → 1단계-B
 
