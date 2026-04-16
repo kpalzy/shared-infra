@@ -17,7 +17,7 @@ shared-infra/
 ├── caddy/      — shared_caddy 컨테이너 (포트 80/443, 프로덕션 라우팅)
 ├── postgres/   — shared_postgres 컨테이너 (포트 5432, DB 공유)
 └── docs/       — 운영 참고 문서
-    └── docker-macos-settings.md  — macOS Docker 스토리지 구조 및 영속성 주의사항
+    └── docker-volume-strategy.md — 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
 ```
 
 ---
@@ -76,7 +76,7 @@ docker compose restart
 
 > ⚠️ **macOS 데이터 영속성 주의**: Rancher Desktop은 Linux VM 위에서 동작하며, Docker named volume은 VM 재시작 시 소실된다.
 > 이 때문에 postgres는 named volume 대신 `./data` bind mount를 사용한다. VM 재시작 후에도 데이터가 유지된다.
-> 자세한 내용: [`docs/docker-macos-settings.md`](docs/docker-macos-settings.md)
+> 자세한 내용: [`docs/docker-volume-strategy.md`](docs/docker-volume-strategy.md)
 
 ### 시작 / 상태 확인 / 재시작
 
