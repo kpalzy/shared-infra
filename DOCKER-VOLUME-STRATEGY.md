@@ -679,6 +679,53 @@ docker ps -a --filter name=shared_caddy
 
 ---
 
+## ⚠️ 설정 변경 후 반드시 터미널 재시작
+
+> **Rancher Desktop 설정 변경, 재설치, factory-reset 후 터미널 세션을 반드시 새로 열어야 한다.**  
+> 기존 세션은 변경 전 PATH, docker context, 소켓 경로를 그대로 물고 있어 엉뚱한 곳에 명령을 보낸다.
+
+### 자주 발생하는 증상
+
+```
+Cannot connect to the Docker daemon
+error during connect: EOF
+nerdctl: command not found
+```
+
+원인 대부분이 **설정 변경 후 터미널 재시작 안 함**이다.
+
+### 체크 순서
+
+```bash
+# 1. 현재 docker context 확인 (desktop-linux면 잘못된 것)
+docker context ls
+
+# 2. RD 소켓 존재 여부 확인
+ls -la ~/.rd/docker.sock
+
+# 3. nerdctl로 직접 테스트 (containerd 엔진 기준)
+~/.rd/bin/nerdctl ps
+```
+
+### containerd 엔진 사용 시 주의
+
+Rancher Desktop + containerd 조합에서는 **`docker` 명령어 대신 `nerdctl`을 사용**한다.  
+`docker context`가 잘못 설정된 경우 `docker` 명령은 동작하지 않아도 `nerdctl`은 정상 동작할 수 있다.
+
+```bash
+# containerd 기준 올바른 명령어
+nerdctl ps
+nerdctl compose up -d
+nerdctl system prune -af
+
+# docker context 문제 해결 (dockerd로 전환 시)
+docker context use rancher-desktop
+```
+
+> 설정 바꾼 뒤 안 되면 **터미널 껐다 켜는 것부터** 시작할 것.
+
+---
+
 ## 현재 확인된 설정 및 결론 (2026-04-16 기준)
 
 ### 확인된 환경
