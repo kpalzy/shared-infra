@@ -195,12 +195,13 @@ docker exec -it shared_postgres psql -U shared_pg_su -d postgres \
 
 ### 0. 컨테이너 엔진 및 Kubernetes 설정
 
-**컨테이너 엔진: dockerd (Moby) 권장**
+**컨테이너 엔진: containerd 권장**
 
-`Preferences → Container Engine → General` → **dockerd (moby)** 선택.
+`Preferences → Container Engine → General` → **containerd** 선택.
 
-- docker compose 명령어 그대로 사용 가능
-- nerdctl compose는 미구현 기능 다수 — 호환 문제 발생 가능
+- K8s 1.24+ 표준 런타임. k3s와 이미지 스토어 공유 → K8s 개발로 자연스럽게 이어짐
+- `nerdctl`, `nerdctl compose` 사용 (CLI 거의 동일, 일반 사용에서 차이 미미)
+- dockerd는 K8s 1.24에서 공식 제거됨. 나중에 K8s 쓸 계획이 있다면 처음부터 containerd 권장
 - 리소스 차이는 미미 (무거운 건 Lima VM 자체)
 
 **Kubernetes 비활성화 (RAM 500MB 절약)**
