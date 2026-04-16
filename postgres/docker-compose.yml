@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shared_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shared_pg_su
+      POSTGRES_PASSWORD: "!Q2w3e4r"
+      POSTGRES_DB: postgres
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - shared
+
+networks:
+  shared:
+    external: true

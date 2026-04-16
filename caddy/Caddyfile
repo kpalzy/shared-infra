@@ -1,0 +1,3 @@
+:80 {
+    reverse_proxy kepture-frontend-1:80
+}
