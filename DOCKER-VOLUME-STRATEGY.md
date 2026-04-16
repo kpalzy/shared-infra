@@ -139,32 +139,46 @@ rdctl shell sudo fstrim /
 ## 근본 해결: data-root를 virtiofs Mac 경로로 설정
 
 > **Rancher Desktop을 쓴다면 이 설정은 선택이 아니라 필수다.**  
-> 기본값을 그대로 두면 tmpfs가 꽉 차 빌드가 터지고, `docker system prune`을 해도 공간이 반환되지 않는다.  
+> 기본값을 그대로 두면 tmpfs가 꽉 차 빌드가 터지고, prune을 해도 공간이 반환되지 않는다.  
 > 새 맥 세팅 시 가장 먼저 해야 할 전역 설정이다.
 
 virtiofs는 macOS 파일시스템을 VM 내부에 직접 마운트하는 방식이다.  
-Docker의 `data-root`를 virtiofs로 연결된 Mac 경로(`~/docker-data`)로 바꾸면:
+데이터 저장 경로를 virtiofs로 연결된 Mac 경로(`~/docker-data`)로 바꾸면:
 
-- Docker 이미지/레이어/빌드 캐시가 Mac SSD에 저장 → tmpfs 용량 문제 없음
-- `docker system prune` 시 APFS가 공간 즉시 반환 → diffdisk 누적 문제 해소
+- 이미지/레이어/빌드 캐시가 Mac SSD에 저장 → tmpfs 용량 문제 없음
+- prune 시 APFS가 공간 즉시 반환 → diffdisk 누적 문제 해소
 - VM 재시작해도 데이터 유지
-- Mac에서 직접 접근/백업 가능
 
-> **경로 선택**: `~/docker-data`를 권장한다. data-root는 머신 전역 설정으로 모든 프로젝트의 이미지/레이어가 쌓이는 곳이므로, 특정 프로젝트 디렉터리 안에 두어서는 안 된다.
+> **경로 선택**: `~/docker-data`를 권장한다. 이 설정은 머신 전역으로 모든 프로젝트의 데이터가 쌓이는 곳이므로, 특정 프로젝트 디렉터리 안에 두어서는 안 된다.
 
-### 설정 방법
+### 먼저 — 컨테이너 엔진 확인
 
-**1. Mac에 Docker data 폴더 생성**
+설정 방법이 엔진에 따라 완전히 다르다. 먼저 확인:
+
+```bash
+docker info | grep "Storage Driver"
+```
+
+또는 `Rancher Desktop → Preferences → Container Engine → General`에서 확인.
+
+- **dockerd (moby)** 선택 중 → 아래 [dockerd 설정] 섹션
+- **containerd** 선택 중 → 아래 [containerd 설정] 섹션
+
+---
+
+### [dockerd] data-root 설정
+
+**1. Mac에 data 폴더 생성**
 
 ```bash
 mkdir -p ~/docker-data
 ```
 
-**2. Docker daemon.json 수정**
+**2. daemon.json 수정**
 
 **방법 A — Rancher Desktop GUI (권장)**
 
-`Rancher Desktop → Preferences → Container Engine → dockerd options` 에서 JSON 직접 입력:
+`Rancher Desktop → Preferences → Container Engine → dockerd options` 에서 JSON 입력:
 
 ```json
 {
@@ -172,17 +186,14 @@ mkdir -p ~/docker-data
 }
 ```
 
-저장하면 Rancher Desktop이 자동으로 데몬을 재시작한다. 3단계 생략 가능.
+저장하면 자동으로 데몬 재시작. 3단계 생략 가능.
 
-> 기존 설정(`min-api-version`, `features` 등)이 텍스트박스에 있으면 지우지 말고 `"data-root"` 키만 추가할 것.
+> 기존 설정(`min-api-version`, `features` 등)이 있으면 지우지 말고 `"data-root"` 키만 추가할 것.
 
-**방법 B — rdctl shell (CLI)**
+**방법 B — rdctl shell**
 
 ```bash
-rdctl shell sudo vi /etc/docker/daemon.json
-```
-
-```json
+rdctl shell sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
 {
   "min-api-version": "1.41",
   "features": {
@@ -190,33 +201,84 @@ rdctl shell sudo vi /etc/docker/daemon.json
   },
   "data-root": "/Users/<username>/docker-data"
 }
+EOF
 ```
 
-> `/Users/<username>`은 `mount0`으로 virtiofs를 통해 VM에 마운트되어 있어 접근 가능하다.
-
-**3. Docker 데몬 재시작 (방법 B 사용 시)**
+**3. 데몬 재시작 (방법 B 사용 시)**
 
 ```bash
 rdctl shell sudo service docker restart
-# 또는 Rancher Desktop 재시작
 ```
 
-**4. 정상 동작 확인**
+**4. 확인**
 
 ```bash
 docker info | grep "Docker Root Dir"
 # Docker Root Dir: /Users/<username>/docker-data
 ```
 
+---
+
+### [containerd] data-root 설정
+
+> **containerd는 dockerd보다 설정이 복잡하다.**  
+> Rancher Desktop에서 containerd는 K3s가 내부적으로 관리하며, 설정 파일(`config.toml`)이 **재시작 시마다 자동으로 덮어쓰인다.**  
+> GUI 설정 옵션이 없고, Lima VM 부팅 시 실행되는 provisioning script로만 영구 설정이 가능하다.
+
+**1. Mac에 data 폴더 생성**
+
+```bash
+mkdir -p ~/docker-data/containerd
+```
+
+**2. override.yaml에 provisioning script 작성**
+
+아래 파일을 생성한다 (없으면 새로 만들고, 있으면 `provision` 블록 추가):
+
+`~/Library/Application Support/rancher-desktop/lima/_config/override.yaml`
+
+```yaml
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      mkdir -p /var/lib/rancher/k3s/agent/etc/containerd
+      cat > /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl << 'EOF'
+      {{ template "base" . }}
+
+      root = "/Users/<username>/docker-data/containerd"
+      EOF
+```
+
+> `<username>`을 실제 macOS 사용자명으로 교체 (`whoami`로 확인).  
+> `{{ template "base" . }}`는 K3s 필수 설정을 주입하는 구문으로 반드시 포함해야 한다. 없으면 containerd가 동작하지 않는다.
+
+**3. Rancher Desktop 재시작**
+
+```bash
+rdctl shutdown && rdctl start
+# 또는 메뉴바 → Quit 후 재실행
+```
+
+**4. 확인**
+
+```bash
+rdctl shell sudo cat /var/lib/rancher/k3s/agent/etc/containerd/config.toml | grep root
+# root = "/Users/<username>/docker-data/containerd"
+```
+
+---
+
 ### 주의사항
 
 | 항목 | 내용 |
 |---|---|
 | 성능 | virtiofs I/O가 네이티브보다 느림. 빌드 시간 약 20-30% 증가 가능 |
-| SSD 수명 | **걱정 불필요.** Apple Silicon SSD TBW는 256GB 모델 기준 ~300TB, 512GB↑는 600TB+. 헤비 빌드 기준 연간 소비량은 ~4TB 수준. 또한 기본값(tmpfs) 사용 시에도 diffdisk가 결국 Mac SSD에 저장되므로 쓰기 자체는 어차피 SSD에 가고 있다. |
+| SSD 수명 | **걱정 불필요.** Apple Silicon SSD TBW는 256GB 모델 기준 ~300TB, 512GB↑는 600TB+. 헤비 빌드 기준 연간 소비량은 ~4TB 수준. 기본값(tmpfs) 사용 시에도 diffdisk가 결국 Mac SSD에 저장되므로 쓰기 자체는 어차피 SSD에 가고 있다. |
 | Spotlight | `docker-data` 폴더를 Spotlight 인덱싱에서 제외 권장 |
 | Time Machine | `docker-data` 폴더를 Time Machine 제외 목록에 추가 권장 |
-| 경로 공유 | 두 Docker 데몬이 같은 data-root를 공유하면 안 됨 |
+| 경로 공유 | 두 데몬이 같은 data 경로를 공유하면 안 됨 |
+| containerd 주의 | `config.toml`은 K3s가 재시작 시 덮어쓴다. 직접 편집하지 말고 반드시 `config.toml.tmpl` 또는 provisioning script를 사용할 것 |
 
 **Spotlight 제외 방법**: 시스템 설정 → Siri 및 Spotlight → Spotlight 개인정보 → 폴더 추가
 
@@ -286,16 +348,19 @@ docker ps
 `Cannot connect to the Docker daemon` 오류 → Rancher Desktop을 먼저 실행하고 재시도.
 
 ```bash
-# 현재 data-root 위치 확인
-docker info | grep "Docker Root Dir"
+# 컨테이너 엔진 확인
+docker info | grep "Storage Driver"
 ```
 
-- `Docker Root Dir: /var/lib/docker` → 설정 필요 (아래 1단계 진행)
-- `Docker Root Dir: /Users/.../docker-data` → 이미 설정됨 (2단계로 이동)
+또는 `Rancher Desktop → Preferences → Container Engine → General`에서 확인.
+결과에 따라 1단계 분기:
+
+- **dockerd (moby)** → 1단계-A
+- **containerd** → 1단계-B
 
 ---
 
-### 1단계 — data-root를 virtiofs Mac 경로로 이전
+### 1단계-A — [dockerd] data-root 이전
 
 **1-1. Mac에 docker-data 폴더 생성**
 
@@ -309,10 +374,9 @@ mkdir -p ~/docker-data
 docker volume ls
 ```
 
-named volume에 중요 데이터가 있는 경우 컨테이너를 먼저 내리고 데이터를 bind mount 경로로 복사한다:
+named volume에 중요 데이터가 있는 경우 bind mount 경로로 복사:
 
 ```bash
-# 예시: pgdata named volume → ./data 로 복사
 docker run --rm \
   -v pgdata:/source \
   -v /Users/<username>/shared-infra/postgres/data:/dest \
@@ -331,19 +395,9 @@ docker run --rm \
 }
 ```
 
-저장하면 자동으로 데몬이 재시작된다. 1-4 생략 가능.
+저장하면 자동으로 데몬 재시작. 1-4 생략 가능.
 
-> 기존 설정이 있으면 지우지 말고 `"data-root"` 키만 추가할 것.
-
-**방법 B — rdctl shell (CLI)**
-
-현재 내용 확인 후:
-
-```bash
-rdctl shell sudo cat /etc/docker/daemon.json
-```
-
-기존 내용을 유지하면서 `"data-root"` 키만 추가한다:
+**방법 B — rdctl shell**
 
 ```bash
 rdctl shell sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
@@ -357,19 +411,61 @@ rdctl shell sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
 EOF
 ```
 
-> `<username>`을 실제 macOS 사용자명으로 교체. `whoami` 명령으로 확인 가능.
-
-**1-4. Docker 데몬 재시작 (방법 B 사용 시)**
+**1-4. 재시작 및 확인 (방법 B 사용 시)**
 
 ```bash
 rdctl shell sudo service docker restart
 ```
 
-재시작 후 20~30초 대기 후 확인:
-
 ```bash
 docker info | grep "Docker Root Dir"
 # 기대값: Docker Root Dir: /Users/<username>/docker-data
+```
+
+---
+
+### 1단계-B — [containerd] data-root 이전
+
+> containerd는 K3s가 내부 관리하며 `config.toml`이 재시작 시 덮어쓰인다.  
+> provisioning script를 통해 부팅 시마다 설정이 적용되도록 해야 한다.
+
+**1-1. Mac에 docker-data 폴더 생성**
+
+```bash
+mkdir -p ~/docker-data/containerd
+```
+
+**1-2. override.yaml에 provisioning script 작성**
+
+`~/Library/Application Support/rancher-desktop/lima/_config/override.yaml` 파일을 열어 아래 내용 추가 (파일이 없으면 새로 생성):
+
+```yaml
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      mkdir -p /var/lib/rancher/k3s/agent/etc/containerd
+      cat > /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl << 'EOF'
+      {{ template "base" . }}
+
+      root = "/Users/<username>/docker-data/containerd"
+      EOF
+```
+
+> `<username>` → `whoami`로 확인 후 교체.  
+> `{{ template "base" . }}`는 반드시 포함. 없으면 containerd가 동작하지 않는다.
+
+**1-3. Rancher Desktop 재시작**
+
+```bash
+rdctl shutdown && rdctl start
+```
+
+**1-4. 확인**
+
+```bash
+rdctl shell sudo cat /var/lib/rancher/k3s/agent/etc/containerd/config.toml | grep root
+# root = "/Users/<username>/docker-data/containerd"
 ```
 
 ---
@@ -464,16 +560,22 @@ docker ps -a --filter name=shared_caddy
 
 ### 최초 설정 시 (순서대로)
 
+- [ ] **컨테이너 엔진 확인** (`docker info | grep "Storage Driver"` 또는 Preferences → Container Engine)
 - [ ] **data-root → `~/docker-data` 설정** ← 가장 먼저. 이게 없으면 빌드가 터진다
+  - dockerd: GUI(`dockerd options`) 또는 `/etc/docker/daemon.json`
+  - containerd: `override.yaml` provisioning script로 `config.toml.tmpl` 생성
 - [ ] `~/docker-data` → Spotlight/Time Machine 제외
 - [ ] shared network 생성: `docker network create shared`
 - [ ] 모든 stateful 서비스 bind mount로 전환 (named volume 사용 금지)
 
 ### 재발 방지 체크
 
-- [ ] `docker system prune -af` 주기적으로 실행 (data-root가 `~/docker-data`이면 Mac SSD 공간 즉시 반환됨)
+- [ ] 주기적으로 prune 실행 (data-root가 `~/docker-data`이면 Mac SSD 공간 즉시 반환됨)
+  - dockerd: `docker system prune -af`
+  - containerd: `nerdctl system prune -af`
 - [ ] named volume 사용하지 않기 (compose에서 `volumes:` 최상위 선언 금지)
 - [ ] Rancher Desktop 설정 변경 전 실행 중인 DB 컨테이너 데이터 확인
+- [ ] containerd 사용 시: `config.toml` 직접 편집 금지 (재시작 시 덮어쓰임)
 
 ### VM 재시작이 발생하는 상황
 
