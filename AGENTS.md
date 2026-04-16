@@ -16,8 +16,7 @@ shared-infra/
 ├── AGENTS.md   — 이 파일 (CLAUDE.md, GEMINI.md는 이 파일의 심링크)
 ├── caddy/      — shared_caddy 컨테이너 (포트 80/443, 프로덕션 라우팅)
 ├── postgres/   — shared_postgres 컨테이너 (포트 5432, DB 공유)
-└── docs/       — 운영 참고 문서
-    └── DOCKER-VOLUME-STRATEGY.md — 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
+└── DOCKER-VOLUME-STRATEGY.md — 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
 ```
 
 ---
@@ -76,7 +75,7 @@ docker compose restart
 
 > ⚠️ **macOS 데이터 영속성 주의**: Rancher Desktop은 Linux VM 위에서 동작하며, Docker named volume은 VM 재시작 시 소실된다.
 > 이 때문에 postgres는 named volume 대신 `./data` bind mount를 사용한다. VM 재시작 후에도 데이터가 유지된다.
-> 자세한 내용: [`docs/DOCKER-VOLUME-STRATEGY.md`](docs/DOCKER-VOLUME-STRATEGY.md)
+> 자세한 내용: [`DOCKER-VOLUME-STRATEGY.md`](DOCKER-VOLUME-STRATEGY.md)
 
 ### 시작 / 상태 확인 / 재시작
 
@@ -116,6 +115,37 @@ docker exec -it shared_postgres psql -U shared_pg_su -d postgres \
 ✅ Rancher Desktop 실행 여부를 먼저 확인 후 docker 명령 실행
 ✅ postgres/data/ 는 .gitignore에 등록됨 — git에 올라가지 않음
 ```
+
+---
+
+## Rancher Desktop — 필수 초기 설정
+
+> macOS에서 Rancher Desktop을 쓴다면 아래 두 가지는 새 맥 세팅 시 반드시 먼저 해야 한다.
+
+### 1. data-root를 `~/docker-data`로 설정 (필수)
+
+기본값(`/var/lib/docker`)은 VM tmpfs 위에 있어 3.9GB(8GB RAM 기준)밖에 안 된다.  
+이미지/빌드 캐시가 쌓이면 `no space left on device`로 빌드가 터진다.
+
+`Rancher Desktop → Preferences → Container Engine → dockerd options`:
+
+```json
+{
+  "data-root": "/Users/<username>/docker-data"
+}
+```
+
+저장하면 자동으로 데몬 재시작. 확인:
+```bash
+docker info | grep "Docker Root Dir"
+# Docker Root Dir: /Users/<username>/docker-data
+```
+
+### 2. stateful 서비스는 bind mount 사용 (필수)
+
+named volume은 VM 재시작 시 소멸된다. 모든 DB 컨테이너는 `./data` bind mount를 써야 한다.
+
+> 상세 내용: [`DOCKER-VOLUME-STRATEGY.md`](DOCKER-VOLUME-STRATEGY.md)
 
 ---
 
