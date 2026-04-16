@@ -9,15 +9,15 @@
 
 ```
 genai/
-├── PORTS.md                  ← 포트 레지스트리 (필독 — 새 앱 추가 전 항상 확인)
+├── PORT-REGISTRY.md          ← 포트 레지스트리 (필독 — 새 앱 추가 전 항상 확인)
 ├── shared-infra/             ← 공용 인프라 (Caddy, Postgres)
 │   ├── README.md             ← 지금 여기
 │   ├── AGENTS.md             ← 인프라 운영 규칙
-│   ├── PORTS.md              ← 포트 레지스트리 (필독 — 새 앱 추가 전 항상 확인)
+│   ├── PORT-REGISTRY.md      ← 포트 레지스트리 (필독 — 새 앱 추가 전 항상 확인)
 │   ├── caddy/                ← shared_caddy (포트 80/443)
 │   ├── postgres/             ← shared_postgres (포트 5432)
 │   └── docs/                 ← 운영 참고 문서
-│       └── docker-volume-strategy.md
+│       └── DOCKER-VOLUME-STRATEGY.md
 │
 ├── kepture/                  ← 쇼핑 리서치 큐레이션 앱
 ├── samil_workforce_hub/      ← 인력 운영 관리 앱
@@ -30,9 +30,9 @@ genai/
 
 | 파일 | 역할 |
 |------|------|
-| **[PORTS.md](shared-infra/PORTS.md)** | 앱별 포트 배정 현황 + 새 앱 추가 체크리스트 |
+| **[PORT-REGISTRY.md](shared-infra/PORT-REGISTRY.md)** | 앱별 포트 배정 현황 + 새 앱 추가 체크리스트 |
 | **[shared-infra/AGENTS.md](shared-infra/AGENTS.md)** | Caddy·Postgres 운영 규칙, 배포 시 Caddyfile 수정법 |
-| **[shared-infra/docs/docker-volume-strategy.md](shared-infra/docs/docker-volume-strategy.md)** | 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s) |
+| **[shared-infra/docs/DOCKER-VOLUME-STRATEGY.md](shared-infra/docs/DOCKER-VOLUME-STRATEGY.md)** | 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s) |
 
 ---
 
@@ -66,7 +66,7 @@ ln -s AGENTS.md GEMINI.md
 ```
 1. 프로젝트 한 줄 정의
 2. 기술 스택 (언어, 프레임워크, 컨테이너 런타임)
-3. 로컬 개발 포트 — Frontend / Backend 포트 명시 + PORTS.md 링크
+3. 로컬 개발 포트 — Frontend / Backend 포트 명시 + PORT-REGISTRY.md 링크
 4. 디렉터리 구조 / 핵심 파일 위치
 5. 개발 명령어 (dev 서버, 빌드, 테스트, 마이그레이션)
 6. 절대 하지 말 것 (금지 패턴, 구현 금지 사항)
@@ -80,9 +80,9 @@ ln -s AGENTS.md GEMINI.md
 새 프로젝트를 시작할 때 순서대로 진행한다.
 
 ### 1단계 — 포트 배정
-- [ ] [PORTS.md](PORTS.md) 열어서 비어있는 Frontend / Backend 포트 확인
+- [ ] [PORT-REGISTRY.md](PORT-REGISTRY.md) 열어서 비어있는 Frontend / Backend 포트 확인
 - [ ] `lsof -i :{포트}` 로 실제 사용 중인지 확인
-- [ ] PORTS.md 앱별 포트 표에 등록
+- [ ] PORT-REGISTRY.md 앱별 포트 표에 등록
 
 ### 2단계 — 프로젝트 세팅
 - [ ] `AGENTS.md` 작성 (위 필수 항목 포함)
@@ -124,4 +124,4 @@ docker network create shared
 
 > ⚠️ **macOS 데이터 영속성**: Rancher Desktop은 Linux VM 위에서 동작한다.
 > Docker named volume은 VM 재시작 시 소실되므로, **stateful 서비스(postgres 등)는 반드시 bind mount(`./data`)를 사용**할 것.
-> 자세한 내용: [`docs/docker-volume-strategy.md`](docs/docker-volume-strategy.md)
+> 자세한 내용: [`docs/DOCKER-VOLUME-STRATEGY.md`](docs/DOCKER-VOLUME-STRATEGY.md)

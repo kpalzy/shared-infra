@@ -17,7 +17,7 @@ shared-infra/
 ├── caddy/      — shared_caddy 컨테이너 (포트 80/443, 프로덕션 라우팅)
 ├── postgres/   — shared_postgres 컨테이너 (포트 5432, DB 공유)
 └── docs/       — 운영 참고 문서
-    └── docker-volume-strategy.md — 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
+    └── DOCKER-VOLUME-STRATEGY.md — 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
 ```
 
 ---
@@ -25,9 +25,9 @@ shared-infra/
 ## 포트 관리 — 반드시 먼저 읽을 것
 
 **새 앱 추가, 서버 실행, 포트 변경 전에 반드시 확인:**
-→ [`../shared-infra/PORTS.md`](../shared-infra/PORTS.md)
+→ [`../shared-infra/PORT-REGISTRY.md`](../shared-infra/PORT-REGISTRY.md)
 
-PORTS.md는 이 workspace의 **포트 단일 진실**이다.
+PORT-REGISTRY.md는 이 workspace의 **포트 단일 진실**이다.
 거기서 배정받지 않은 포트를 임의로 사용하지 말 것.
 
 ---
@@ -76,7 +76,7 @@ docker compose restart
 
 > ⚠️ **macOS 데이터 영속성 주의**: Rancher Desktop은 Linux VM 위에서 동작하며, Docker named volume은 VM 재시작 시 소실된다.
 > 이 때문에 postgres는 named volume 대신 `./data` bind mount를 사용한다. VM 재시작 후에도 데이터가 유지된다.
-> 자세한 내용: [`docs/docker-volume-strategy.md`](docs/docker-volume-strategy.md)
+> 자세한 내용: [`docs/DOCKER-VOLUME-STRATEGY.md`](docs/DOCKER-VOLUME-STRATEGY.md)
 
 ### 시작 / 상태 확인 / 재시작
 
@@ -135,7 +135,7 @@ networks:
 
 ## 운영 체크리스트 (새 앱 배포 시)
 
-1. `PORTS.md`에 포트 등록 확인
+1. `PORT-REGISTRY.md`에 포트 등록 확인
 2. 앱 컨테이너 `shared` 네트워크 연결 확인
 3. `caddy/Caddyfile`에 라우팅 추가
 4. `docker compose restart` (caddy)

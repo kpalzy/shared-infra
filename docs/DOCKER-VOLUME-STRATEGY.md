@@ -213,6 +213,7 @@ docker info | grep "Docker Root Dir"
 | 항목 | 내용 |
 |---|---|
 | 성능 | virtiofs I/O가 네이티브보다 느림. 빌드 시간 약 20-30% 증가 가능 |
+| SSD 수명 | **걱정 불필요.** Apple Silicon SSD TBW는 256GB 모델 기준 ~300TB, 512GB↑는 600TB+. 헤비 빌드 기준 연간 소비량은 ~4TB 수준. 또한 기본값(tmpfs) 사용 시에도 diffdisk가 결국 Mac SSD에 저장되므로 쓰기 자체는 어차피 SSD에 가고 있다. |
 | Spotlight | `docker-data` 폴더를 Spotlight 인덱싱에서 제외 권장 |
 | Time Machine | `docker-data` 폴더를 Time Machine 제외 목록에 추가 권장 |
 | 경로 공유 | 두 Docker 데몬이 같은 data-root를 공유하면 안 됨 |
