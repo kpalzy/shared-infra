@@ -63,7 +63,7 @@
 
 | 앱 | Frontend (dev) | Backend (host) | 실행 방식 | 설정 파일 |
 |----|---------------|----------------|-----------|-----------|
-| **kepture** | **5173** | **8001** | Vite dev + nerdctl 컨테이너 | [kepture/docker-compose.yml](kepture/docker-compose.yml) · [kepture/frontend/vite.config.ts](kepture/frontend/vite.config.ts) |
+| **kepture** | **5173** | **8001** | Vite dev + docker 컨테이너 | [kepture/docker-compose.yml](kepture/docker-compose.yml) · [kepture/frontend/vite.config.ts](kepture/frontend/vite.config.ts) |
 | **samil_workforce_hub** | **5174** (Vite dev) · 15173 (컨테이너) | **18000** (컨테이너) · ⚠️ 8000 (uvicorn 직접) | compose or uvicorn 직접 | [samil_workforce_hub/docker-compose.yml](samil_workforce_hub/docker-compose.yml) |
 
 > ⚠️ **samil 주의**: uvicorn을 호스트에서 직접 실행(`uvicorn main:app --port 8000`)하면
@@ -134,7 +134,7 @@ Vite proxy를 쓰면 브라우저 요청은 same-origin이라 CORS 불필요하�
       reverse_proxy new-app-frontend-1:80
   }
   ```
-- `shared_caddy` 컨테이너 재시작: `cd shared-infra/caddy && nerdctl compose restart`
+- `shared_caddy` 컨테이너 재시작: `cd shared-infra/caddy && docker compose restart`
 - `.env`의 `CORS_ORIGINS`에 운영 도메인 추가 확인
 
 ---

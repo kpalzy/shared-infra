@@ -165,7 +165,7 @@ docker compose stop
 docker logs shared_postgres --tail 30
 ```
 
-> **컨테이너 런타임**: Rancher Desktop(nerdctl/docker) 사용.
+> **컨테이너 런타임**: Rancher Desktop(docker) 사용.
 > 앱 기동 전 반드시 Rancher Desktop이 실행 중인지 확인할 것.
 > `docker ps` 가 에러를 내면 Rancher Desktop을 먼저 시작해야 한다.
 
