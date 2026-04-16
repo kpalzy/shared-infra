@@ -172,6 +172,47 @@ rdctl shell sudo fstrim /
 
 ---
 
+## 이미지/캐시 정기 정리
+
+### 현재 사용량 확인
+
+```bash
+# VM 내부 /var/lib 사용량 (Docker 데이터 전체)
+rdctl shell df -h /var/lib
+
+# diffdisk sparse file 실제 점유량 (Mac SSD 기준)
+du -sh ~/Library/Application\ Support/rancher-desktop/lima/0/diffdisk
+```
+
+### 정리 명령어
+
+```bash
+# containerd (nerdctl)
+nerdctl system prune -af     # 안 쓰는 이미지 + 컨테이너 + 빌드캐시 전부
+nerdctl builder prune        # 빌드캐시만
+
+# dockerd
+docker system prune -af
+docker builder prune
+```
+
+> ⚠️ `-a` 플래그는 현재 실행 중이 아닌 이미지를 전부 삭제한다.  
+> 다음 빌드 때 이미지를 다시 받아야 하므로 작업 중간에는 쓰지 말 것.
+
+### 언제 실행하나
+
+| 타이밍 | 내용 |
+|---|---|
+| `/var/lib` 사용량 70% 이상 | `nerdctl system prune -af` |
+| 프로젝트 작업 종료 후 | 해당 이미지만 `nerdctl rmi <image>` |
+| 빌드 캐시만 정리 | `nerdctl builder prune` |
+| 한 달에 한 번 정도 | 전체 prune 권장 |
+
+> containerd는 prune 후 `/var/lib` 내부 공간은 줄지만 **diffdisk sparse file 크기는 즉시 줄지 않는다** (fstrim 이슈).  
+> 실제 SSD 점유가 신경 쓰이면 `rdctl shell sudo fstrim /` 후 확인.
+
+---
+
 ## data-root 설정 — 엔진별 가이드
 
 > **containerd 사용 시**: data-root 설정 불필요. 100GB data-volume 기본값으로 충분.  
