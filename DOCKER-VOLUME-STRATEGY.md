@@ -623,15 +623,6 @@ docker compose up -d
 
 ---
 
-### 5단계 — Spotlight / Time Machine 제외 (수동)
-
-터미널에서 직접 제외 명령은 없으므로 사용자에게 안내:
-
-```
-시스템 설정 → Siri 및 Spotlight → Spotlight 개인정보 → ~/docker-data 폴더 추가
-시스템 설정 → 일반 → Time Machine → 제외 항목 → ~/docker-data 추가
-```
-
 ---
 
 ### 진단 요약 — 현재 상태 점검용
@@ -664,21 +655,19 @@ docker ps -a --filter name=shared_caddy
 
 ### 최초 설정 시 (순서대로)
 
-- [ ] **컨테이너 엔진 확인** (`docker info | grep "Storage Driver"` 또는 Preferences → Container Engine)
-- [ ] **data-root → `~/docker-data` 설정** ← 가장 먼저. 이게 없으면 빌드가 터진다
-  - dockerd: GUI(`dockerd options`) 또는 `/etc/docker/daemon.json`
-  - containerd: `override.yaml` provisioning script로 `config.toml.tmpl` 생성
-- [ ] `~/docker-data` → Spotlight/Time Machine 제외
+- [ ] Rancher Desktop: K8s 비활성화 + containerd 선택
+- [ ] VM 시작 확인: `docker ps` 에러 없으면 OK
 - [ ] shared network 생성: `docker network create shared`
-- [ ] 모든 stateful 서비스 bind mount로 전환 (named volume 사용 금지)
+- [ ] postgres 시작: `cd shared-infra/postgres && docker compose up -d`
+- [ ] caddy 시작: `cd shared-infra/caddy && docker compose up -d`
+- [ ] 모든 stateful 서비스 bind mount 확인 (named volume 사용 금지)
 
 ### 재발 방지 체크
 
-- [ ] 주기적으로 prune 실행 (data-root가 `~/docker-data`이면 Mac SSD 공간 즉시 반환됨)
-  - dockerd: `docker system prune -af`
+- [ ] 주기적으로 prune 실행 (`/var/lib` 70% 이상 시)
   - containerd: `nerdctl system prune -af`
+  - dockerd: `docker system prune -af`
 - [ ] named volume 사용하지 않기 (compose에서 `volumes:` 최상위 선언 금지)
-- [ ] Rancher Desktop 설정 변경 전 실행 중인 DB 컨테이너 데이터 확인
 - [ ] containerd 사용 시: `config.toml` 직접 편집 금지 (재시작 시 덮어쓰임)
 
 ### VM 재시작이 발생하는 상황
