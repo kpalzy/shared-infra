@@ -149,6 +149,22 @@ mkdir -p ~/docker-data
 
 **2. Docker daemon.json 수정**
 
+**방법 A — Rancher Desktop GUI (권장)**
+
+`Rancher Desktop → Preferences → Container Engine → dockerd options` 에서 JSON 직접 입력:
+
+```json
+{
+  "data-root": "/Users/<username>/docker-data"
+}
+```
+
+저장하면 Rancher Desktop이 자동으로 데몬을 재시작한다. 3단계 생략 가능.
+
+> 기존 설정(`min-api-version`, `features` 등)이 텍스트박스에 있으면 지우지 말고 `"data-root"` 키만 추가할 것.
+
+**방법 B — rdctl shell (CLI)**
+
 ```bash
 rdctl shell sudo vi /etc/docker/daemon.json
 ```
@@ -165,7 +181,7 @@ rdctl shell sudo vi /etc/docker/daemon.json
 
 > `/Users/<username>`은 `mount0`으로 virtiofs를 통해 VM에 마운트되어 있어 접근 가능하다.
 
-**3. Docker 데몬 재시작**
+**3. Docker 데몬 재시작 (방법 B 사용 시)**
 
 ```bash
 rdctl shell sudo service docker restart
@@ -289,15 +305,31 @@ docker run --rm \
   alpine sh -c "cp -a /source/. /dest/"
 ```
 
-**1-3. 현재 daemon.json 내용 확인**
+**1-3. daemon.json에 data-root 추가**
+
+**방법 A — Rancher Desktop GUI (권장)**
+
+`Rancher Desktop → Preferences → Container Engine → dockerd options` 에서 `"data-root"` 키 추가:
+
+```json
+{
+  "data-root": "/Users/<username>/docker-data"
+}
+```
+
+저장하면 자동으로 데몬이 재시작된다. 1-4 생략 가능.
+
+> 기존 설정이 있으면 지우지 말고 `"data-root"` 키만 추가할 것.
+
+**방법 B — rdctl shell (CLI)**
+
+현재 내용 확인 후:
 
 ```bash
 rdctl shell sudo cat /etc/docker/daemon.json
 ```
 
-**1-4. daemon.json에 data-root 추가**
-
-기존 내용을 유지하면서 `"data-root"` 키만 추가한다. 일반적으로 아래와 같은 형태가 된다:
+기존 내용을 유지하면서 `"data-root"` 키만 추가한다:
 
 ```bash
 rdctl shell sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
@@ -313,7 +345,7 @@ EOF
 
 > `<username>`을 실제 macOS 사용자명으로 교체. `whoami` 명령으로 확인 가능.
 
-**1-5. Docker 데몬 재시작**
+**1-4. Docker 데몬 재시작 (방법 B 사용 시)**
 
 ```bash
 rdctl shell sudo service docker restart
