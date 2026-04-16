@@ -6,6 +6,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    env_file:
+      - path: ./caddy.secrets.env
+        required: false   # 시크릿 없는 환경(로컬 :80 라우팅만)에서도 기동 가능
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data:/data

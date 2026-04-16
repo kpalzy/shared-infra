@@ -14,9 +14,12 @@
 ```
 shared-infra/
 ├── AGENTS.md   — 이 파일 (CLAUDE.md, GEMINI.md는 이 파일의 심링크)
+├── DOCKER-VOLUME-STRATEGY.md — 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
 ├── caddy/      — shared_caddy 컨테이너 (포트 80/443, 프로덕션 라우팅)
-├── postgres/   — shared_postgres 컨테이너 (포트 5432, DB 공유)
-└── DOCKER-VOLUME-STRATEGY.md — 환경별 Docker 볼륨 전략 (macOS/Linux/클라우드/K8s)
+│   ├── Caddyfile                  — 라우팅 설정 (git 관리, 시크릿 없이 플레이스홀더만)
+│   ├── caddy.secrets.env          — 실제 시크릿 (gitignore — 절대 커밋 금지)
+│   └── caddy.secrets.env.example  — 시크릿 템플릿 (git 관리, 더미값)
+└── postgres/   — shared_postgres 컨테이너 (포트 5432, DB 공유)
 ```
 
 ---
@@ -66,11 +69,69 @@ cd shared-infra/caddy
 docker compose restart
 ```
 
+### Caddyfile 시크릿 관리 규칙
+
+Caddyfile은 git으로 관리한다. 단, **시크릿(API 토큰, 비밀번호 등)은 절대 직접 쓰지 말고 환경변수 플레이스홀더로 분리**한다.
+
+#### 파일 구조
+
+| 파일 | git 관리 | 용도 |
+|------|----------|------|
+| `Caddyfile` | ✅ 커밋 | 라우팅 설정. `{$VAR}` 플레이스홀더만 사용 |
+| `caddy.secrets.env` | ❌ gitignore | 실제 시크릿 값. 머신마다 직접 생성 |
+| `caddy.secrets.env.example` | ✅ 커밋 | 어떤 시크릿이 필요한지 문서화한 템플릿 |
+
+#### Caddyfile 작성 방법
+
+시크릿은 `{$변수명}` 플레이스홀더로 작성:
+
+```
+yourdomain.com {
+    tls {
+        dns cloudflare {$CF_API_TOKEN}
+    }
+    reverse_proxy kepture-frontend-1:80
+}
+```
+
+> **`{$VAR}` vs `{env.VAR}`**: `{$VAR}`는 파싱 시 치환(모든 디렉티브 지원), `{env.VAR}`는 런타임 치환(일부 디렉티브만 지원). Caddyfile에서는 `{$VAR}` 사용을 권장.
+
+#### caddy.secrets.env 형식
+
+```bash
+# DNS 인증 (Let's Encrypt wildcard 등)
+CF_API_TOKEN=실제_클라우드플레어_토큰
+
+# basic_auth 해시 — bcrypt 해시의 $ 는 반드시 $$ 로 이스케이프
+# 해시 생성: docker run --rm caddy caddy hash-password --plaintext "비밀번호"
+BASIC_AUTH_HASH=$$2a$$12$$...
+```
+
+> ⚠️ **`basic_auth` 주의**: bcrypt 해시는 `$2a$12$...` 형태인데, env 파일에서 `$`를 `$$`로 이스케이프하지 않으면 Docker가 변수로 해석해 해시가 깨진다.
+
+#### autosave.json 주의
+
+Caddy는 `{$VAR}` 치환된 **실제 값**을 `caddy/config/` 아래 `autosave.json`에 저장한다.  
+→ `caddy/config/`는 이미 `.gitignore`에 등록되어 있으므로 별도 조치 불필요.
+
+#### 새 머신 셋업 시
+
+```bash
+cd shared-infra/caddy
+cp caddy.secrets.env.example caddy.secrets.env
+# caddy.secrets.env 열어서 실제 값 입력
+docker compose up -d
+```
+
 ### 주의
 ```
 ❌ 로컬 dev 디버깅 중 Caddyfile 건드리지 말 것
 ❌ shared_caddy 컨테이너를 내리면 80포트 서비스 전체 중단
+❌ Caddyfile에 API 토큰, 비밀번호 등 시크릿 직접 입력 금지
+❌ caddy.secrets.env 절대 커밋 금지
 ✅ 앱 컨테이너가 내려가도 caddy는 502 반환할 뿐 — caddy 자체는 내리지 않아도 됨
+✅ 시크릿은 반드시 {$VAR} 플레이스홀더로 분리 → caddy.secrets.env에 보관
+✅ 새 시크릿 추가 시 caddy.secrets.env.example도 함께 업데이트
 ```
 
 ---
