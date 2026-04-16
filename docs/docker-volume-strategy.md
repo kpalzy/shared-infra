@@ -7,9 +7,15 @@
 
 ## TL;DR — 결론부터
 
-macOS에서 Rancher Desktop을 쓰면 **Docker named volume은 VM 재시작 시 날아간다.**  
-PostgreSQL 등 상태 보존이 필요한 서비스는 **반드시 bind mount를 써야 한다.**  
-Docker 이미지/레이어 저장도 **data-root를 virtiofs Mac 경로로 설정**하지 않으면 tmpfs가 꽉 차 빌드가 실패한다.
+macOS에서 Rancher Desktop을 쓰면 두 가지를 반드시 설정해야 한다.
+
+**1. data-root를 `~/docker-data`로 전역 설정 (필수)**  
+기본값(`/var/lib/docker`)은 VM의 tmpfs 위에 있어 8GB RAM 기준 3.9GB밖에 안 된다.  
+이미지/빌드 캐시가 쌓이면 `no space left on device`로 빌드가 터진다.  
+`~/docker-data`로 옮기면 Mac SSD에 저장되어 용량 문제가 사라지고, `docker system prune` 시 공간도 즉시 반환된다.
+
+**2. stateful 서비스는 반드시 bind mount 사용**  
+PostgreSQL 등 DB 컨테이너는 named volume 대신 `./data` bind mount를 써야 VM 재시작 후에도 데이터가 유지된다.
 
 ---
 
@@ -132,12 +138,19 @@ rdctl shell sudo fstrim /
 
 ## 근본 해결: data-root를 virtiofs Mac 경로로 설정
 
-virtiofs는 macOS 파일시스템을 VM 내부에 직접 마운트하는 방식이다.  
-Docker의 `data-root`를 virtiofs로 연결된 Mac 경로로 바꾸면:
+> **Rancher Desktop을 쓴다면 이 설정은 선택이 아니라 필수다.**  
+> 기본값을 그대로 두면 tmpfs가 꽉 차 빌드가 터지고, `docker system prune`을 해도 공간이 반환되지 않는다.  
+> 새 맥 세팅 시 가장 먼저 해야 할 전역 설정이다.
 
-- Docker 이미지/레이어가 Mac SSD에 저장 → tmpfs 용량 문제 없음
+virtiofs는 macOS 파일시스템을 VM 내부에 직접 마운트하는 방식이다.  
+Docker의 `data-root`를 virtiofs로 연결된 Mac 경로(`~/docker-data`)로 바꾸면:
+
+- Docker 이미지/레이어/빌드 캐시가 Mac SSD에 저장 → tmpfs 용량 문제 없음
+- `docker system prune` 시 APFS가 공간 즉시 반환 → diffdisk 누적 문제 해소
 - VM 재시작해도 데이터 유지
 - Mac에서 직접 접근/백업 가능
+
+> **경로 선택**: `~/docker-data`를 권장한다. data-root는 머신 전역 설정으로 모든 프로젝트의 이미지/레이어가 쌓이는 곳이므로, 특정 프로젝트 디렉터리 안에 두어서는 안 된다.
 
 ### 설정 방법
 
@@ -448,16 +461,16 @@ docker ps -a --filter name=shared_caddy
 
 ## Rancher Desktop 설정 체크리스트
 
-### 최초 설정 시
+### 최초 설정 시 (순서대로)
 
-- [ ] Docker data-root → `~/docker-data` (virtiofs) 설정
-- [ ] 모든 stateful 서비스 bind mount로 전환
+- [ ] **data-root → `~/docker-data` 설정** ← 가장 먼저. 이게 없으면 빌드가 터진다
 - [ ] `~/docker-data` → Spotlight/Time Machine 제외
 - [ ] shared network 생성: `docker network create shared`
+- [ ] 모든 stateful 서비스 bind mount로 전환 (named volume 사용 금지)
 
 ### 재발 방지 체크
 
-- [ ] `docker system prune -af` 주기적으로 실행 (Mac SSD는 즉시 반환됨)
+- [ ] `docker system prune -af` 주기적으로 실행 (data-root가 `~/docker-data`이면 Mac SSD 공간 즉시 반환됨)
 - [ ] named volume 사용하지 않기 (compose에서 `volumes:` 최상위 선언 금지)
 - [ ] Rancher Desktop 설정 변경 전 실행 중인 DB 컨테이너 데이터 확인
 
