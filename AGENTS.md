@@ -2,6 +2,9 @@
 
 로컬 공용 인프라 관리 규칙. 개별 앱의 AGENTS.md/CLAUDE.md와 별개로 항상 읽어라.
 
+> **참고**: `CLAUDE.md`와 `GEMINI.md`는 이 파일(`AGENTS.md`)의 심링크다.
+> 세 파일 모두 동일한 내용이며, AI 에이전트 종류에 무관하게 이 파일 하나로 관리한다.
+
 ---
 
 ## 역할
@@ -10,6 +13,7 @@
 
 ```
 shared-infra/
+├── AGENTS.md   — 이 파일 (CLAUDE.md, GEMINI.md는 이 파일의 심링크)
 ├── caddy/      — shared_caddy 컨테이너 (포트 80/443, 프로덕션 라우팅)
 ├── postgres/   — shared_postgres 컨테이너 (포트 5432, DB 공유)
 └── docs/       — 운영 참고 문서
