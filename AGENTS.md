@@ -209,28 +209,26 @@ docker exec -it shared_postgres psql -U shared_pg_su -d postgres \
 `Preferences → Kubernetes → Enable Kubernetes` **체크 해제**.  
 docker compose 기반 개발에는 Kubernetes가 필요 없다. 비활성화만 해도 RAM 약 500MB 절약.
 
-### 1. data-root를 `~/docker-data`로 설정 (필수)
+### 1. VM 디스크 및 data-root
 
-기본값(`/var/lib/docker`)은 VM tmpfs 위에 있어 3.9GB(8GB RAM 기준)밖에 안 된다.  
-이미지/빌드 캐시가 쌓이면 `no space left on device`로 빌드가 터진다.
+RD v1.22+에서 `/var/lib`(Docker 데이터 전체)은 tmpfs가 아닌 **100GB data-volume(diffdisk)**에 마운트된다.  
+`no space left on device` 문제는 기본값으로 해결된다. **별도 설정 불필요.**
 
-`Rancher Desktop → Preferences → Container Engine → dockerd options`:
+- **containerd**: data-root 변경 불가 (config.toml 재시작 시 덮어쓰임). 기본값으로 충분
+- **dockerd**: GUI `dockerd options`로 `~/docker-data` 설정 가능 — diffdisk 밖 Mac SSD에 직접 저장, prune 즉시 반환
 
-```json
-{
-  "data-root": "/Users/<username>/docker-data"
-}
-```
-
-저장하면 자동으로 데몬 재시작. 확인:
+이미지/캐시가 쌓이면 주기적으로 정리:
 ```bash
-docker info | grep "Docker Root Dir"
-# Docker Root Dir: /Users/<username>/docker-data
+nerdctl system prune -af   # containerd
+docker system prune -af    # dockerd
 ```
+
+> 상세 내용: [`DOCKER-VOLUME-STRATEGY.md`](DOCKER-VOLUME-STRATEGY.md)
 
 ### 2. stateful 서비스는 bind mount 사용 (필수)
 
-named volume은 VM 재시작 시 소멸된다. 모든 DB 컨테이너는 `./data` bind mount를 써야 한다.
+named volume은 VM 재시작 후 유지되지만, `rdctl factory-reset` 시 소멸된다.  
+모든 DB 컨테이너는 `./data` bind mount를 써야 factory-reset 후에도 데이터가 Mac SSD에 남는다.
 
 > 상세 내용: [`DOCKER-VOLUME-STRATEGY.md`](DOCKER-VOLUME-STRATEGY.md)
 
