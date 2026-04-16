@@ -7,21 +7,26 @@
 
 ## TL;DR — 결론부터
 
-macOS에서 Rancher Desktop을 쓰면 세 가지를 반드시 설정해야 한다.
+macOS에서 Rancher Desktop v1.22+을 쓸 때 핵심 설정 요약.
 
 **0. Rancher Desktop 초기 설정 (새 맥 세팅 시 가장 먼저)**
 - `Preferences → Kubernetes → Enable Kubernetes` **체크 해제** → RAM 약 500MB 절약
 - `Preferences → Container Engine → General` → **containerd** 권장
   - K8s 표준 런타임, k3s와 이미지 스토어 공유, 미래 K8s 개발로 자연스럽게 이어짐
-  - docker compose 대신 `nerdctl compose` 사용 (CLI 거의 동일, 일반 사용에서 차이 미미)
 
-**1. data-root를 `~/docker-data`로 전역 설정 (필수)**  
-기본값(`/var/lib/docker`)은 VM의 tmpfs 위에 있어 8GB RAM 기준 3.9GB밖에 안 된다.  
-이미지/빌드 캐시가 쌓이면 `no space left on device`로 빌드가 터진다.  
-`~/docker-data`로 옮기면 Mac SSD에 저장되어 용량 문제가 사라지고, `docker system prune` 시 공간도 즉시 반환된다.
+**1. data-root 설정 — 엔진별로 다름**
+
+| 엔진 | 기본 저장 위치 | data-root 변경 방법 | 필요 여부 |
+|---|---|---|---|
+| **dockerd** | diffdisk 내 `/var/lib/docker` | GUI → `dockerd options` → JSON 한 줄 | 선택 (권장) |
+| **containerd** | diffdisk 내 `/var/lib` | **사실상 불가** (config.toml 재시작 시 덮어쓰임) | **불필요** |
+
+> RD v1.22+에서 `/var/lib`은 tmpfs가 아닌 **data-volume(100GB 전용 ext4)**에 마운트된다.  
+> containerd 기본값 그대로도 빌드 실패나 용량 문제가 없다.
 
 **2. stateful 서비스는 반드시 bind mount 사용**  
-PostgreSQL 등 DB 컨테이너는 named volume 대신 `./data` bind mount를 써야 VM 재시작 후에도 데이터가 유지된다.
+PostgreSQL 등 DB 컨테이너는 named volume 대신 `./data` bind mount를 쓸 것.  
+VM 재시작 후에도 데이터가 유지되며, **`rdctl factory-reset` 후에도 Mac SSD에 남는다.**
 
 ---
 
@@ -37,26 +42,41 @@ Docker 컨테이너는 Linux 커널 기능에 의존한다:
 macOS는 Darwin(BSD 기반) 커널을 사용하기 때문에 이 기능들이 없다.  
 따라서 Docker Desktop과 Rancher Desktop 모두 **내부적으로 경량 Linux VM을 띄워서** 그 안에서 Docker 데몬을 실행한다.
 
-### Rancher Desktop의 VM 구조 (Apple VZ + Lima)
+### Rancher Desktop의 VM 구조 (Apple VZ + Lima, v1.22+)
 
 ```
-macOS Host (APFS)
+macOS Host (APFS/SSD)
 └── Rancher Desktop
     └── Lima VM (Apple Virtualization Framework)
-        ├── basedisk   → VM OS 베이스 이미지 (읽기 전용, ~264MB)
-        ├── diffdisk   → VM 상태 변경분 스냅샷 (sparse file, 100GB 할당)
-        └── RAM에 tmpfs로 올라간 루트 파일시스템 (3.9GB = RAM/2)
+        ├── basedisk      → VM OS 베이스 이미지 (읽기 전용, ~264MB)
+        ├── diffdisk      → 100GB sparse file (Mac SSD에 저장)
+        │   └── data-volume (ext4) → VM 안에서 아래 경로로 마운트됨:
+        │       ├── /var/lib   ← Docker/containerd 데이터 전체
+        │       ├── /etc       ← 설정 파일
+        │       ├── /home
+        │       └── /tmp
+        └── tmpfs → VM 루트(/) 전용 (OS 파일만, Docker 데이터 없음)
 ```
 
-**핵심 문제**: VM의 루트(`/`)가 **tmpfs (메모리 기반 파일시스템)** 이다.
+virtiofs로 Mac 홈 디렉터리도 VM에 공유됨:
+```
+/Users/j → virtiofs → VM 내부에서 /Users/j 로 접근 가능
+```
 
-- VM 시작 시: diffdisk 상태를 tmpfs로 로드
-- VM 실행 중: 모든 Docker 데이터(`/var/lib/docker`)가 tmpfs에 저장됨
-- VM 재시작: tmpfs 초기화 → **Docker 데이터 소멸**
+**RD v1.22+ 핵심 구조**:
+- `/var/lib`(Docker 데이터)이 **tmpfs가 아닌 data-volume**에 있음
+- data-volume은 diffdisk(Mac SSD의 sparse file) 안 ext4 파티션
+- 기본 100GB 할당 → 빌드 실패 용량 문제 없음
+- **VM 재시작 후에도 Docker 데이터 유지됨**
+- factory-reset 시에만 data-volume 초기화됨
 
 ---
 
 ## 문제 1: tmpfs 용량 부족 (빌드 실패)
+
+> ⚠️ **RD v1.22+에서는 이 문제가 기본적으로 해결됨**  
+> `/var/lib`이 100GB data-volume에 마운트되어 있어 tmpfs 용량과 무관하다.  
+> 구버전 RD 또는 기존 설정이 잘못된 경우에만 해당.
 
 ### 증상
 
@@ -64,56 +84,59 @@ macOS Host (APFS)
 ERROR: no space left on device
 ```
 
-- tmpfs 크기 = RAM / 2 (8GB RAM → 3.9GB tmpfs)
-- Docker 이미지 레이어 + 빌드 캐시가 tmpfs를 채우면 빌드 실패
+### 원인 (구버전 RD 또는 잘못된 설정)
 
-### 원인
-
-Docker의 `data-root`가 기본값 `/var/lib/docker` (tmpfs 위)에 있어서  
-이미지를 많이 pull/build할수록 tmpfs가 가득 찬다.
+Docker의 `data-root`가 tmpfs(`/`) 위에 있을 경우:
+- tmpfs 크기 = RAM / 2 (8GB RAM → 3.9GB)
+- 이미지 레이어 + 빌드 캐시가 tmpfs를 채우면 빌드 실패
 
 ### 잘못된 대응
 
 ```bash
-docker system prune -af  # tmpfs 안의 논리적 공간만 비워줌
+docker system prune -af
 ```
 
-`docker system prune`은 tmpfs 내부는 정리하지만,  
+`docker system prune`은 논리적 공간만 정리하고  
 **diffdisk sparse file의 블록은 macOS에 반환되지 않는다.**  
-→ prune 해도 macOS에서 `du -sh diffdisk`는 줄어들지 않는다.
+→ prune 해도 `du -sh diffdisk`는 줄어들지 않는다.
 
-### 올바른 해결: data-root를 virtiofs Mac 경로로 변경 (아래 참고)
+### 올바른 해결
+
+- **RD v1.22+**: factory-reset 후 재시작하면 data-volume 구조로 자동 해결됨
+- **dockerd 사용 시**: data-root를 `~/docker-data`로 변경하면 diffdisk 밖으로 분리 가능 (아래 참고)
+- **containerd 사용 시**: data-root 변경 불필요 — data-volume이 이미 100GB
 
 ---
 
-## 문제 2: Named Volume 휘발 (DB 데이터 유실)
+## 문제 2: Named Volume 데이터 유실
 
-### 증상
+### RD v1.22+ 기준 named volume 영속성
 
-- VM 재시작(macOS 리부트, Rancher Desktop 설정 변경 등) 후 `docker volume ls`가 비어있음
-- PostgreSQL 컨테이너가 빈 DB로 시작됨
+| 상황 | named volume | bind mount (`./data`) |
+|---|---|---|
+| VM 재시작 (macOS 재부팅 포함) | **유지** ✅ | **유지** ✅ |
+| Rancher Desktop 업데이트 | 대체로 유지 ✅ | **유지** ✅ |
+| `rdctl factory-reset` | **소멸** ❌ | **유지** ✅ (Mac SSD에 남음) |
 
-### 원인
+> RD v1.22+에서 named volume은 `/var/lib/docker/volumes/`에 저장되며,  
+> 이 경로는 data-volume(diffdisk)에 마운트되어 **VM 재시작 후에도 유지된다.**  
+> 단, factory-reset은 diffdisk 자체를 초기화하므로 소멸됨.
 
-Docker named volume은 `/var/lib/docker/volumes/`에 저장된다.  
-이 경로가 tmpfs 위에 있으므로 **VM이 재시작되면 사라진다.**
+### 그래도 bind mount를 권장하는 이유
 
 ```yaml
-# 위험한 방식 (named volume)
+# named volume — VM 재시작 OK, factory-reset 시 소멸
 volumes:
   - pgdata:/var/lib/postgresql/data
 
+# bind mount — VM 재시작 OK, factory-reset 후에도 Mac SSD에 유지 ✅
 volumes:
-  pgdata:  # ← /var/lib/docker/volumes/pgdata 에 저장 → tmpfs → 재시작 시 소멸
+  - ./data:/var/lib/postgresql/data
 ```
 
-### 올바른 해결: bind mount로 Mac 경로 직접 사용
-
-```yaml
-# 안전한 방식 (bind mount)
-volumes:
-  - ./data:/var/lib/postgresql/data  # Mac 파일시스템에 직접 저장
-```
+- factory-reset 시에도 데이터 보존
+- Mac에서 직접 파일 접근/백업 가능
+- 경로가 명확해 실수 위험 낮음
 
 ---
 
@@ -142,20 +165,13 @@ rdctl shell sudo fstrim /
 
 ---
 
-## 근본 해결: data-root를 virtiofs Mac 경로로 설정
+## data-root 설정 — 엔진별 가이드
 
-> **Rancher Desktop을 쓴다면 이 설정은 선택이 아니라 필수다.**  
-> 기본값을 그대로 두면 tmpfs가 꽉 차 빌드가 터지고, prune을 해도 공간이 반환되지 않는다.  
-> 새 맥 세팅 시 가장 먼저 해야 할 전역 설정이다.
-
-virtiofs는 macOS 파일시스템을 VM 내부에 직접 마운트하는 방식이다.  
-데이터 저장 경로를 virtiofs로 연결된 Mac 경로(`~/docker-data`)로 바꾸면:
-
-- 이미지/레이어/빌드 캐시가 Mac SSD에 저장 → tmpfs 용량 문제 없음
-- prune 시 APFS가 공간 즉시 반환 → diffdisk 누적 문제 해소
-- VM 재시작해도 데이터 유지
-
-> **경로 선택**: `~/docker-data`를 권장한다. 이 설정은 머신 전역으로 모든 프로젝트의 데이터가 쌓이는 곳이므로, 특정 프로젝트 디렉터리 안에 두어서는 안 된다.
+> **containerd 사용 시 (권장)**: data-root 설정 불필요.  
+> RD v1.22+에서 `/var/lib`이 이미 100GB data-volume에 있으므로 기본값으로 충분하다.  
+>
+> **dockerd 사용 시**: data-root를 `~/docker-data`로 변경하면 diffdisk 밖으로 분리되어  
+> `docker system prune` 시 Mac SSD 공간이 즉시 반환된다는 이점이 있다.
 
 ### 먼저 — 컨테이너 엔진 선택
 
@@ -184,11 +200,11 @@ data-root 설정도 `override.yaml` 한 번 작성하면 이후 자동 적용이
 
 현재 엔진 확인:
 ```bash
-docker info | grep "Storage Driver"
+rdctl list-settings | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['containerEngine']['name'])"
 ```
 
-- **containerd** 선택 중 → 아래 [containerd 설정] 섹션
-- **dockerd (moby)** 선택 중 → 아래 [dockerd 설정] 섹션
+- **containerd** → data-root 설정 불필요. 바로 shared network / 서비스 시작으로 이동
+- **dockerd (moby)** → data-root 설정 원하면 아래 [dockerd 설정] 섹션 참고
 
 ---
 
@@ -247,50 +263,24 @@ docker info | grep "Docker Root Dir"
 
 ### [containerd] data-root 설정
 
-> **containerd는 dockerd보다 설정이 복잡하다.**  
-> Rancher Desktop에서 containerd는 K3s가 내부적으로 관리하며, 설정 파일(`config.toml`)이 **재시작 시마다 자동으로 덮어쓰인다.**  
-> GUI 설정 옵션이 없고, Lima VM 부팅 시 실행되는 provisioning script로만 영구 설정이 가능하다.
+> **설정 불필요 — 기본값으로 충분하다.**
 
-**1. Mac에 data 폴더 생성**
+RD v1.22+에서 containerd 데이터는 `/var/lib/nerdctl/`, `/var/lib/docker/` 등에 저장되며,  
+이 경로는 100GB data-volume(diffdisk)에 마운트되어 있다.
 
-```bash
-mkdir -p ~/docker-data/containerd
-```
+**왜 변경이 어려운가:**
+- `config.toml`은 Rancher Desktop이 재시작할 때마다 덮어씀 (GitHub #2708)
+- Lima `override.yaml` provisioning script 방식은 YAML 파싱 이슈로 동작 불안정 (확인됨)
+- K8s 비활성화 시 `/var/lib/rancher/k3s/` 경로도 무관함
 
-**2. override.yaml에 provisioning script 작성**
-
-아래 파일을 생성한다 (없으면 새로 만들고, 있으면 `provision` 블록 추가):
-
-`~/Library/Application Support/rancher-desktop/lima/_config/override.yaml`
-
-```yaml
-provision:
-  - mode: system
-    script: |
-      #!/bin/sh
-      mkdir -p /var/lib/rancher/k3s/agent/etc/containerd
-      cat > /var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl << 'EOF'
-      {{ template "base" . }}
-
-      root = "/Users/<username>/docker-data/containerd"
-      EOF
-```
-
-> `<username>`을 실제 macOS 사용자명으로 교체 (`whoami`로 확인).  
-> `{{ template "base" . }}`는 K3s 필수 설정을 주입하는 구문으로 반드시 포함해야 한다. 없으면 containerd가 동작하지 않는다.
-
-**3. Rancher Desktop 재시작**
+**결론:** containerd data-root는 건드리지 말 것. 100GB 한도를 넘을 것 같으면 디스크 크기를 늘리거나 `nerdctl system prune`으로 정리할 것.
 
 ```bash
-rdctl shutdown && rdctl start
-# 또는 메뉴바 → Quit 후 재실행
-```
+# 공간 정리
+nerdctl system prune -af
 
-**4. 확인**
-
-```bash
-rdctl shell sudo cat /var/lib/rancher/k3s/agent/etc/containerd/config.toml | grep root
-# root = "/Users/<username>/docker-data/containerd"
+# VM 디스크 한도 확장 (필요 시)
+rdctl set --experimental.virtual-machine.disk-size=200GiB
 ```
 
 ---
@@ -307,6 +297,47 @@ rdctl shell sudo cat /var/lib/rancher/k3s/agent/etc/containerd/config.toml | gre
 | containerd 주의 | `config.toml`은 K3s가 재시작 시 덮어쓴다. 직접 편집하지 말고 반드시 `config.toml.tmpl` 또는 provisioning script를 사용할 것 |
 
 **Spotlight 제외 방법**: 시스템 설정 → Siri 및 Spotlight → Spotlight 개인정보 → 폴더 추가
+
+---
+
+## VM 디스크 크기 (diffdisk)
+
+### 기본값과 한도
+
+| 항목 | 값 |
+|---|---|
+| 기본 할당 크기 | **100GiB** (Rancher Desktop 공식 기본값) |
+| 파일 형식 | sparse file — 실제 쓴 만큼만 Mac SSD 차지 |
+| 위치 | `~/Library/Application Support/rancher-desktop/lima/0/diffdisk` |
+| 확장 | 가능 (명령어 1줄) |
+| 축소 | **불가** |
+
+> 100GiB는 SSD 용량과 무관한 고정 기본값이다. 2TB SSD여도 기본 100GiB로 시작한다.  
+> Sparse file이므로 실제 사용량만큼만 점유 (factory reset 직후 ~400MB).
+
+### 디스크 크기 확인
+
+```bash
+# 할당 크기 확인
+rdctl list-settings | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['experimental']['virtualMachine']['diskSize'])"
+
+# 실제 사용량 확인
+du -sh ~/Library/Application\ Support/rancher-desktop/lima/0/diffdisk
+
+# VM 내부에서 여유 공간 확인
+rdctl shell df -h /var/lib
+```
+
+### 디스크 크기 확장
+
+```bash
+# GUI 불가 — rdctl 명령어로만 변경 가능
+rdctl set --experimental.virtual-machine.disk-size=200GiB
+# Rancher Desktop이 자동으로 재시작됨
+```
+
+> 줄이는 것은 불가능하므로 신중하게 설정할 것.  
+> 기본 100GiB는 웬만한 개발 환경에 충분하다. 꽉 차기 전에 `nerdctl/docker system prune`을 주기적으로 실행할 것.
 
 ---
 
@@ -614,19 +645,53 @@ docker ps -a --filter name=shared_caddy
 
 ---
 
-## 환경 정보 (2026-04-16 기준)
+## 현재 확인된 설정 및 결론 (2026-04-16 기준)
+
+### 확인된 환경
 
 | 항목 | 값 |
 |---|---|
 | Rancher Desktop | v1.22.0 |
+| 컨테이너 엔진 | **containerd** |
+| Kubernetes | **비활성화** |
 | VM type | vz (Apple Virtualization Framework) |
 | Mount type | virtiofs |
-| CPU | 2코어 |
-| RAM | 8GB |
-| tmpfs root size | 3.9GB (RAM/2) |
-| diffdisk 할당 | 100GB (sparse) |
-| diffdisk 실제 점유 | ~79GB (누적) |
-| Mac 여유 공간 | ~588GB |
+| diffdisk 할당 | 100GiB (sparse) |
+| diffdisk 실제 점유 | ~393MB (factory reset 직후) |
+
+### VM 마운트 구조 (직접 확인)
+
+```
+/var/lib   → data-volume (diffdisk ext4, 97.9GB)  ← Docker 데이터 전체
+/etc       → data-volume
+/home      → data-volume
+/Users/j   → virtiofs (Mac SSD 직접 공유)
+tmpfs      → VM 루트(/) 전용, Docker 데이터 없음
+```
+
+### 결론 — 현재 설정으로 충분한 것들
+
+| 항목 | 결론 |
+|---|---|
+| data-root 변경 | **불필요** — `/var/lib`이 이미 100GB data-volume에 있음 |
+| named volume 사용 | **가능** — VM 재시작 후 유지됨 |
+| named volume vs bind mount | **bind mount 권장** — factory-reset 후에도 Mac SSD에 유지 |
+| 빌드 실패 (no space) | **문제없음** — 100GB 여유 |
+| diffdisk 누적 | `nerdctl system prune`으로 정기 정리 |
+| 디스크 한도 도달 시 | `rdctl set --experimental.virtual-machine.disk-size=200GiB` |
+
+### 해야 할 것 (최초 1회)
+
+```bash
+# 1. shared 네트워크 생성
+docker network create shared
+
+# 2. postgres 시작
+cd shared-infra/postgres && docker compose up -d
+
+# 3. caddy 시작
+cd shared-infra/caddy && docker compose up -d
+```
 
 ---
 
@@ -764,11 +829,12 @@ Kubernetes Cluster
 ### 환경별 최종 요약
 
 ```
-로컬 macOS       → data-root virtiofs + bind mount 필수 (named volume 사용 금지)
-로컬 Linux       → named volume 또는 bind mount 자유롭게 사용 가능
-클라우드 단일 VM  → bind mount + 별도 데이터 볼륨(EBS 등) 분리
-Kubernetes       → PersistentVolumeClaim + StorageClass
-프로덕션 DB      → RDS / Cloud SQL 등 매니지드 서비스
+로컬 macOS (RD v1.22+)  → containerd: 기본값으로 충분. DB는 bind mount 권장 (factory-reset 대비)
+                           dockerd: data-root ~/docker-data 설정하면 diffdisk 밖으로 분리 가능
+로컬 Linux              → named volume 또는 bind mount 자유롭게 사용 가능
+클라우드 단일 VM         → bind mount + 별도 데이터 볼륨(EBS 등) 분리
+Kubernetes              → PersistentVolumeClaim + StorageClass
+프로덕션 DB             → RDS / Cloud SQL 등 매니지드 서비스
 ```
 
 ---
