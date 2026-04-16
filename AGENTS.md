@@ -191,7 +191,22 @@ docker exec -it shared_postgres psql -U shared_pg_su -d postgres \
 
 ## Rancher Desktop — 필수 초기 설정
 
-> macOS에서 Rancher Desktop을 쓴다면 아래 두 가지는 새 맥 세팅 시 반드시 먼저 해야 한다.
+> macOS에서 Rancher Desktop을 쓴다면 아래를 새 맥 세팅 시 반드시 먼저 설정해야 한다.
+
+### 0. 컨테이너 엔진 및 Kubernetes 설정
+
+**컨테이너 엔진: dockerd (Moby) 권장**
+
+`Preferences → Container Engine → General` → **dockerd (moby)** 선택.
+
+- docker compose 명령어 그대로 사용 가능
+- nerdctl compose는 미구현 기능 다수 — 호환 문제 발생 가능
+- 리소스 차이는 미미 (무거운 건 Lima VM 자체)
+
+**Kubernetes 비활성화 (RAM 500MB 절약)**
+
+`Preferences → Kubernetes → Enable Kubernetes` **체크 해제**.  
+docker compose 기반 개발에는 Kubernetes가 필요 없다. 비활성화만 해도 RAM 약 500MB 절약.
 
 ### 1. data-root를 `~/docker-data`로 설정 (필수)
 
