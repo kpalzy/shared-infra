@@ -66,7 +66,7 @@ newapp.yourdomain.com {
 수정 후 반드시 재시작:
 ```bash
 cd shared-infra/caddy
-docker compose restart
+nerdctl compose restart
 ```
 
 ### Caddyfile 시크릿 관리 규칙
@@ -152,27 +152,27 @@ docker compose up -d
 
 ```bash
 # 상태 확인
-docker ps -a --filter name=shared_postgres
+nerdctl ps -a --filter name=shared_postgres
 
 # 시작 (처음 or 내려가 있을 때)
 cd /path/to/shared-infra/postgres
-docker compose up -d
+nerdctl compose up -d
 
 # 중지 (데이터 보존)
-docker compose stop
+nerdctl compose stop
 
 # 로그 확인
-docker logs shared_postgres --tail 30
+nerdctl logs shared_postgres --tail 30
 ```
 
-> **컨테이너 런타임**: Rancher Desktop(docker) 사용.
+> **컨테이너 런타임**: Rancher Desktop(containerd/nerdctl) 사용. 개발계 기준.
 > 앱 기동 전 반드시 Rancher Desktop이 실행 중인지 확인할 것.
-> `docker ps` 가 에러를 내면 Rancher Desktop을 먼저 시작해야 한다.
+> `nerdctl ps` 가 에러를 내면 Rancher Desktop을 먼저 시작해야 한다.
 
 ### 새 앱 DB 추가
 
 ```bash
-docker exec -it shared_postgres psql -U shared_pg_su -d postgres \
+nerdctl exec -it shared_postgres psql -U shared_pg_su -d postgres \
   -c "CREATE DATABASE newapp;"
 ```
 
@@ -195,14 +195,15 @@ docker exec -it shared_postgres psql -U shared_pg_su -d postgres \
 
 ### 0. 컨테이너 엔진 및 Kubernetes 설정
 
-**컨테이너 엔진: containerd 권장**
+**컨테이너 엔진: containerd — 개발계 기준**
 
 `Preferences → Container Engine → General` → **containerd** 선택.
 
+- **현재 개발계는 containerd 사용 중** → CLI는 `nerdctl` / `nerdctl compose`
 - K8s 1.24+ 표준 런타임. k3s와 이미지 스토어 공유 → K8s 개발로 자연스럽게 이어짐
-- `nerdctl`, `nerdctl compose` 사용 (CLI 거의 동일, 일반 사용에서 차이 미미)
 - dockerd는 K8s 1.24에서 공식 제거됨. 나중에 K8s 쓸 계획이 있다면 처음부터 containerd 권장
 - 리소스 차이는 미미 (무거운 건 Lima VM 자체)
+- Rancher Desktop은 containerd 모드에서도 `/var/run/docker.sock` docker compat socket을 노출 → Promtail 등 docker socket 의존 도구 정상 작동
 
 **Kubernetes 비활성화 (RAM 500MB 절약)**
 
@@ -215,7 +216,8 @@ RD v1.22+에서 `/var/lib`(Docker 데이터 전체)은 tmpfs가 아닌 **100GB d
 `no space left on device` 문제는 기본값으로 해결된다. **별도 설정 불필요.**
 
 - **containerd**: data-root 변경 불가 (config.toml 재시작 시 덮어쓰임). 기본값으로 충분
-- **dockerd**: GUI `dockerd options`로 `~/docker-data` 설정 가능 — diffdisk 밖 Mac SSD에 직접 저장, prune 즉시 반환
+- **dockerd**: GUI `dockerd options`로 `~/docker-data` 설정 가능 — diffdisk 밖 Mac SSD에 직접 저장. 단 virtiofs 경유 특성상 prune 후 즉각 공간 반환은 미보장 (containerd와 실질 차이 불분명)
+- **공통**: 어느 엔진이든 정기 prune은 필수. SSD 점유가 줄지 않으면 `rdctl shell sudo fstrim /var/lib` 시도, 근본 해결은 factory-reset
 
 이미지/캐시가 쌓이면 주기적으로 정리:
 ```bash
@@ -244,6 +246,60 @@ networks:
   default: {}
   shared:
     external: true
+```
+
+---
+
+## 모니터링 (Grafana + Loki + Promtail)
+
+- **역할**: 컨테이너 로그 수집 + DB 모니터링 + Telegram 알림
+- **설정 파일**: `monitoring/docker-compose.yml`
+- **데이터 위치**: `monitoring/grafana/data/`, `monitoring/loki/data/` (bind mount, gitignore)
+
+### 구성
+
+| 컨테이너 | 역할 | 포트 |
+|----------|------|------|
+| shared_grafana | 대시보드 + 알림 | 3000 (호스트) |
+| shared_loki | 로그 저장 | 3100 (내부) |
+| shared_promtail | 컨테이너 로그 → Loki 전송 | - |
+
+### 시작
+
+```bash
+cd shared-infra/monitoring
+cp .env.example .env
+# .env 열어서 GF_ADMIN_PASSWORD, GF_PG_PASSWORD 입력
+# Telegram 알림 원하면 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 도 입력
+nerdctl compose up -d
+# localhost:3000 접속 (admin / .env에 설정한 비밀번호)
+```
+
+### 자동 프로비저닝 (UI 설정 불필요)
+
+- 데이터소스: `grafana/provisioning/datasources/` — Loki + PostgreSQL 자동 등록
+- 알림 채널: `grafana/provisioning/alerting/contact-points.yml` — **현재 주석 처리됨** (Telegram 토큰 설정 후 활성화)
+- 알림 규칙: `grafana/provisioning/alerting/alert-rules.yml` — 에러 급증, 컨테이너 다운, DB 커넥션
+
+### Telegram 알림 활성화 방법
+
+1. `.env`에 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` 입력
+2. `grafana/provisioning/alerting/contact-points.yml` 주석 해제
+3. `nerdctl compose restart grafana`
+
+### Loki 로그 보관
+
+- 보관 기간: **14일** (`loki/loki-config.yml` `retention_period: 14d`)
+- 삭제 방식: compactor 10분 간격 정리 (`delete_request_store: filesystem`)
+- 변경 시: `loki-config.yml` 수정 → `nerdctl compose restart loki`
+
+### 주의
+```
+❌ grafana/data/, loki/data/ 커밋 금지 (gitignore 등록됨)
+❌ .env 커밋 금지 (Telegram 토큰 + DB 비밀번호 포함)
+✅ Telegram 활성화 전에도 Grafana 대시보드 + 로그 조회는 동작함
+✅ 알림 규칙 변경 시 YAML 수정 → nerdctl compose restart grafana
+✅ 새 컨테이너 추가 시 Promtail이 자동 감지 (docker compat socket 기반)
 ```
 
 ---

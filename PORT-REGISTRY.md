@@ -54,6 +54,9 @@
 |--------|-------------|------|
 | shared_caddy | 80, 443 | 프로덕션 라우팅 전용. **dev에서는 건드리지 말 것** |
 | shared_postgres | 5432 | 컨테이너 내부 전용. 호스트 미노출 |
+| shared_grafana | 3000 | 모니터링 대시보드 + 알림 |
+| shared_loki | 3100 | 로그 수집 (컨테이너 내부 전용) |
+| kepture-crawl-engine | 8080 | 크롤 엔진 API (컨테이너 내부 전용, 호스트 미노출) |
 
 설정: [shared-infra/caddy/docker-compose.yml](shared-infra/caddy/docker-compose.yml)
 

@@ -1,0 +1,51 @@
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: shared_grafana
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-admin}
+      GF_ALERTING_ENABLED: "false"           # legacy alerting off
+      GF_UNIFIED_ALERTING_ENABLED: "true"    # new unified alerting
+      # Telegram — provisioning YAML에서 ${TELEGRAM_BOT_TOKEN} 참조
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # PostgreSQL — datasources.yml에서 ${GF_PG_PASSWORD} 참조
+      GF_PG_PASSWORD: ${GF_PG_PASSWORD:-}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - shared
+
+  loki:
+    image: grafana/loki:3.5
+    container_name: shared_loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./loki/data:/loki
+    networks:
+      - shared
+
+  promtail:
+    image: grafana/promtail:3.5
+    container_name: shared_promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/log:/var/log:ro
+      - /run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - shared
+
+networks:
+  shared:
+    external: true
